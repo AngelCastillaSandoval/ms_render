@@ -348,6 +348,7 @@ public class ReportService {
                                         // 4. Parámetros
                                         Map<String, Object> parameters = new HashMap<>();
                                         parameters.put("ReportTitle", "Reporte de Actividades");
+                                        parameters.put("SUBREPORT_DIR", "images/"); // <<--- ¡IMPORTANTE para el logo!
 
                                         // 5. Llenamos el reporte
                                         JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);

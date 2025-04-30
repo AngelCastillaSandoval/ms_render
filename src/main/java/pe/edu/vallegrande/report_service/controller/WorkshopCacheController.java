@@ -7,6 +7,7 @@ import pe.edu.vallegrande.report_service.service.WorkshopCacheService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/workshop-cache")
 @RequiredArgsConstructor
