@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.BodyInserters;
 import pe.edu.vallegrande.report_service.dto.ReportDto;
 import pe.edu.vallegrande.report_service.dto.ReportPDFDto;
 import pe.edu.vallegrande.report_service.dto.ReportWithWorkshopsDto;
@@ -25,6 +26,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.net.URI;
 import java.sql.DriverManager;
 import java.time.LocalDate;
 import java.util.*;
@@ -305,71 +307,90 @@ public class ReportService {
      * 🔹 Generación de PDF de reporte por ID con filtro de fechas
      */
     public Mono<ResponseEntity<byte[]>> generatePdfByIdWithDateFilter(Integer reportId, LocalDate workshopDateStart, LocalDate workshopDateEnd) {
-        return reportRepo.findById(reportId)
-                .flatMap(report ->
-                        workshopRepo.findByReportId(reportId)
-                                .filter(rw -> {
-                                    boolean inRange = true;
-                                    if (workshopDateStart != null && rw.getWorkshopDateStart() != null) {
-                                        inRange = !rw.getWorkshopDateStart().isBefore(workshopDateStart);
-                                    }
-                                    if (workshopDateEnd != null && rw.getWorkshopDateEnd() != null) {
-                                        inRange = inRange && !rw.getWorkshopDateEnd().isAfter(workshopDateEnd);
-                                    }
-                                    return inRange;
-                                })
-                                .collectList()
-                                .flatMap(filteredWorkshops -> {
-                                    try {
-                                        // 1. Cargar archivo Jasper
-                                        InputStream inputStream = new ClassPathResource("reportPDF.jasper").getInputStream();
-                                        JasperReport jasperReport = (JasperReport) JRLoader.loadObject(inputStream);
+        String folder = "pdf";
 
-                                        // 2. Preparamos la lista de datos
-                                        List<ReportPDFDto> reportData = new ArrayList<>();
-                                        for (ReportWorkshop workshop : filteredWorkshops) {
-                                            ReportPDFDto dto = new ReportPDFDto();
-                                            dto.setReport_id(report.getId());
-                                            dto.setReport_year(report.getYear());
-                                            dto.setTrimester(report.getTrimester());
-                                            dto.setReport_description(report.getDescription());
-                                            dto.setSchedule(report.getSchedule());
-                                            dto.setStatus(report.getStatus());
-                                            dto.setWorkshop_id(workshop.getId());
-                                            dto.setWorkshop_name(workshop.getWorkshopName());
-                                            dto.setWorkshop_description(workshop.getDescription());
-                                            dto.setImage_url(workshop.getImageUrl());
-                                            reportData.add(dto);
+        StringBuilder fileNameBuilder = new StringBuilder("reporte_" + reportId);
+        if (workshopDateStart != null) {
+            fileNameBuilder.append("_from_").append(workshopDateStart);
+        }
+        if (workshopDateEnd != null) {
+            fileNameBuilder.append("_to_").append(workshopDateEnd);
+        }
+        fileNameBuilder.append(".pdf");
+
+        String fileName = fileNameBuilder.toString();
+
+        return storageService.fileExists(folder, fileName)
+                .flatMap(exists -> {
+                    if (exists) {
+                        String url = storageService.getPublicUrl(folder, fileName);
+                        HttpHeaders headers = new HttpHeaders();
+                        headers.setLocation(URI.create(url));
+                        return Mono.just(ResponseEntity.status(HttpStatus.FOUND)
+                                .headers(headers)
+                                .body(new byte[0]));
+                    }
+
+                    return reportRepo.findById(reportId)
+                            .flatMap(report -> workshopRepo.findByReportId(reportId)
+                                    .filter(rw -> {
+                                        boolean inRange = true;
+                                        if (workshopDateStart != null && rw.getWorkshopDateStart() != null) {
+                                            inRange = !rw.getWorkshopDateStart().isBefore(workshopDateStart);
                                         }
+                                        if (workshopDateEnd != null && rw.getWorkshopDateEnd() != null) {
+                                            inRange = inRange && !rw.getWorkshopDateEnd().isAfter(workshopDateEnd);
+                                        }
+                                        return inRange;
+                                    })
+                                    .collectList()
+                                    .flatMap(filteredWorkshops -> {
+                                        try {
+                                            InputStream inputStream = new ClassPathResource("reportPDF.jasper").getInputStream();
+                                            JasperReport jasperReport = (JasperReport) JRLoader.loadObject(inputStream);
 
-                                        // 3. Fuente de datos
-                                        JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(reportData);
+                                            List<ReportPDFDto> reportData = new ArrayList<>();
+                                            for (ReportWorkshop workshop : filteredWorkshops) {
+                                                ReportPDFDto dto = new ReportPDFDto();
+                                                dto.setReport_id(report.getId());
+                                                dto.setReport_year(report.getYear());
+                                                dto.setTrimester(report.getTrimester());
+                                                dto.setReport_description(report.getDescription());
+                                                dto.setSchedule(report.getSchedule());
+                                                dto.setStatus(report.getStatus());
+                                                dto.setWorkshop_id(workshop.getId());
+                                                dto.setWorkshop_name(workshop.getWorkshopName());
+                                                dto.setWorkshop_description(workshop.getDescription());
+                                                dto.setImage_url(workshop.getImageUrl());
+                                                reportData.add(dto);
+                                            }
 
-                                        // 4. Parámetros
-                                        Map<String, Object> parameters = new HashMap<>();
-                                        parameters.put("ReportTitle", "Reporte de Actividades");
-                                        parameters.put("SUBREPORT_DIR", "images/"); // <<--- ¡IMPORTANTE para el logo!
+                                            JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(reportData);
+                                            Map<String, Object> parameters = new HashMap<>();
+                                            parameters.put("ReportTitle", "Reporte de Actividades");
+                                            parameters.put("SUBREPORT_DIR", "images/");
 
-                                        // 5. Llenamos el reporte
-                                        JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);
+                                            JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);
+                                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                            JasperExportManager.exportReportToPdfStream(jasperPrint, baos);
+                                            byte[] pdfBytes = baos.toByteArray();
 
-                                        // 6. Exportamos a PDF
-                                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                                        JasperExportManager.exportReportToPdfStream(jasperPrint, baos);
+                                            // 🔄 Subir a Supabase en segundo plano (no bloquear)
+                                            storageService.uploadPdf(folder, fileName, pdfBytes).subscribe();
 
-                                        HttpHeaders headers = new HttpHeaders();
-                                        headers.setContentType(MediaType.APPLICATION_PDF);
-                                        headers.setContentDispositionFormData("filename", "reporte_" + reportId + ".pdf");
+                                            // ✅ Devolver el PDF inmediatamente
+                                            HttpHeaders headers = new HttpHeaders();
+                                            headers.setContentType(MediaType.APPLICATION_PDF);
+                                            headers.setContentDispositionFormData("attachment", fileName);
+                                            return Mono.just(new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK));
 
-                                        return Mono.just(new ResponseEntity<>(baos.toByteArray(), headers, HttpStatus.OK));
-
-                                    } catch (Exception e) {
-                                        log.error("Error al generar PDF", e);
-                                        return Mono.error(new RuntimeException("Error generando el PDF", e));
-                                    }
-                                })
-                )
-                .switchIfEmpty(Mono.error(new NoSuchElementException("Reporte no encontrado con ID: " + reportId)));
+                                        } catch (Exception e) {
+                                            log.error("❌ Error al generar PDF:", e);
+                                            return Mono.error(new RuntimeException("Error generando el PDF", e));
+                                        }
+                                    })
+                            ).switchIfEmpty(Mono.error(new NoSuchElementException("Reporte no encontrado con ID: " + reportId)));
+                });
     }
 
     // ======================= MAPEO DTO =======================

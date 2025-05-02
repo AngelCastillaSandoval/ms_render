@@ -95,4 +95,35 @@ public class SupabaseStorageService {
             return Mono.empty();
         }
     }
+
+    public Mono<String> uploadPdf(String folder, String fileName, byte[] pdfBytes) {
+        String path = folder + "/" + fileName;
+        return webClient.put()
+                .uri(uriBuilder -> uriBuilder.path("/object/{bucket}/{path}")
+                        .build(bucket, path))
+                .header("x-upsert", "true")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(BodyInserters.fromValue(pdfBytes))
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(response -> projectUrl + "/storage/v1/object/public/" + bucket + "/" + path);
+    }
+
+    public Mono<Boolean> fileExists(String folder, String fileName) {
+        String path = folder + "/" + fileName;
+        return webClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/object/info/{bucket}/{path}")
+                        .build(bucket, path))
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(resp -> true)
+                .onErrorResume(err -> Mono.just(false));
+    }
+
+    public String getPublicUrl(String folder, String fileName) {
+        return projectUrl + "/storage/v1/object/public/" + bucket + "/" + folder + "/" + fileName;
+    }
+
+
 }
