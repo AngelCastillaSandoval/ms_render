@@ -37,7 +37,7 @@ spring:
         jwt:
           issuer-uri: https://securetoken.google.com/security-prs1
 
-  # ✅ Limites de carga de archivos y peticiones
+
   codec:
     max-in-memory-size: 50MB
 
