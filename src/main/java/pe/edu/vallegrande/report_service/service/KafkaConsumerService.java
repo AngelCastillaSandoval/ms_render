@@ -23,15 +23,22 @@ public class KafkaConsumerService {
 
     /**
      * 🔹 Escucha eventos del topic "workshop-events" y sincroniza la información en el cache de reportes.
-     * Este método se activa automáticamente cada vez que llega un mensaje desde Kafka.
      * Convierte el JSON recibido a DTO, lo transforma en entidad, y lo guarda o actualiza.
      */
-    @KafkaListener(topics = "workshop-events", groupId = "report-service")
+    @KafkaListener(topics = "workshop-events")
     public void consumeWorkshopEvent(ConsumerRecord<String, String> record) {
         try {
             String json = record.value();
             WorkshopKafkaEventDto dto = objectMapper.readValue(json, WorkshopKafkaEventDto.class);
+
+            // ⚠️ Validación básica
+            if (dto.getId() == null || dto.getName() == null) {
+                log.warn("⚠️ Evento ignorado por datos incompletos: {}", dto);
+                return;
+            }
+
             log.info("📥 Recibido evento Kafka: {}", dto);
+
             // 🔄 Construye la entidad WorkshopCache desde el DTO
             WorkshopCache cache = WorkshopCache.builder()
                     .id(dto.getId())
@@ -40,6 +47,7 @@ public class KafkaConsumerService {
                     .dateEnd(dto.getDateEnd())
                     .status(dto.getStatus())
                     .build();
+
             // 💾 Si ya existe, actualiza; si no, inserta nuevo registro
             cacheRepository.findById(dto.getId())
                     .flatMap(existing -> {
