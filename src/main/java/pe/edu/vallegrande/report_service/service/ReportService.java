@@ -393,6 +393,14 @@ public class ReportService {
                 });
     }
 
+    /**
+     * ⚫ Verifica si ya existe un reporte con el mismo año y trimestre
+     */
+    public Mono<Boolean> existsByYearAndTrimester(Integer year, String trimester) {
+        return reportRepo.findByYearAndTrimester(year, trimester)
+                .hasElements();
+    }
+
     // ======================= MAPEO DTO =======================
 
     private ReportDto toDto(Report r) {

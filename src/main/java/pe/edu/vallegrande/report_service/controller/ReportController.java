@@ -95,4 +95,16 @@ public class ReportController {
     ) {
         return service.generatePdfByIdWithDateFilter(reportId, workshopDateStart, workshopDateEnd);
     }
+
+    /**
+     * 🔹 Verifica si existe el reporte
+     */
+    @GetMapping("/exist")
+    public Mono<ResponseEntity<Boolean>> checkIfExists(
+            @RequestParam Integer year,
+            @RequestParam String trimester) {
+        return service.existsByYearAndTrimester(year, trimester)
+                .map(ResponseEntity::ok);
+    }
+
 }

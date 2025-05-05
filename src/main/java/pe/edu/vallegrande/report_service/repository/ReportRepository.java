@@ -8,4 +8,7 @@ import reactor.core.publisher.Flux;
 @Repository
 public interface ReportRepository extends ReactiveCrudRepository<Report, Integer> {
     Flux<Report> findByStatus(String status);
+    // ReportRepository.java
+    Flux<Report> findByYearAndTrimester(Integer year, String trimester);
+
 }
