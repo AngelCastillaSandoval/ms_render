@@ -58,3 +58,6 @@ logging:
   level:
     io.r2dbc: DEBUG
     pe.edu.vallegrande.user_service: DEBUG
+    org.springframework.web.cors: DEBUG
+    org.springframework.security.web.server: DEBUG
+

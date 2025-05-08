@@ -7,7 +7,7 @@ import pe.edu.vallegrande.user.service.UserService;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
-
+@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {

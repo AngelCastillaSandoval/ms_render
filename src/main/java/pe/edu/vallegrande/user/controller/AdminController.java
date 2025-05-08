@@ -9,7 +9,7 @@ import pe.edu.vallegrande.user.dto.UserDto;
 import pe.edu.vallegrande.user.service.UserService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
+@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/admin/users")
 public class AdminController {

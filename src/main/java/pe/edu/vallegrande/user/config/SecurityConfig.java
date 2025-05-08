@@ -31,13 +31,16 @@ public class SecurityConfig {
         http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(auth -> auth
+                        .pathMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll() // 👈 permite preflight
                         .pathMatchers("/api/admin/**").hasRole("ADMIN")
                         .pathMatchers("/api/users/**").authenticated()
                         .anyExchange().permitAll()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtDecoder(jwtDecoder())
-                                .jwtAuthenticationConverter(this::convertJwt))
+                        .jwt(jwt -> jwt
+                                .jwtDecoder(jwtDecoder())
+                                .jwtAuthenticationConverter(this::convertJwt)
+                        )
                 );
         return http.build();
     }

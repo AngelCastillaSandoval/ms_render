@@ -103,23 +103,30 @@ public class UserService {
                     existing.setCellPhone(dto.getCellPhone());
                     existing.setRole(dto.getRole());
 
-                    // Si hay una nueva imagen de perfil
-                    if (!dto.getProfileImage().isEmpty()) {
-                        // Eliminar imagen anterior
-                        if (existing.getProfileImage() != null) {
-                            storageService.deleteImage(existing.getProfileImage()).subscribe();
+                    String newImage = dto.getProfileImage();
+
+                    if (newImage != null) {
+                        if (!newImage.isEmpty()) {
+                            // Subir nueva imagen, eliminar la anterior si existe
+                            if (existing.getProfileImage() != null) {
+                                storageService.deleteImage(existing.getProfileImage()).subscribe();
+                            }
+                            return storageService.uploadBase64Image("users", newImage)
+                                    .flatMap(imageUrl -> {
+                                        existing.setProfileImage(imageUrl);
+                                        return usersRepository.save(existing).map(this::toDto);
+                                    });
+                        } else {
+                            // ⚠️ Imagen es "", entonces eliminar imagen actual
+                            if (existing.getProfileImage() != null) {
+                                storageService.deleteImage(existing.getProfileImage()).subscribe();
+                                existing.setProfileImage(null); // eliminar imagen
+                            }
+                            return usersRepository.save(existing).map(this::toDto);
                         }
-                        // Subir nueva imagen
-                        return storageService.uploadBase64Image("users", dto.getProfileImage())
-                                .flatMap(imageUrl -> {
-                                    existing.setProfileImage(imageUrl); // Actualizar URL de la imagen
-                                    return usersRepository.save(existing)
-                                            .map(this::toDto);
-                                });
                     } else {
-                        // Si no hay nueva imagen, solo guardamos
-                        return usersRepository.save(existing)
-                                .map(this::toDto);
+                        // Imagen no se tocó → mantener la existente
+                        return usersRepository.save(existing).map(this::toDto);
                     }
                 });
     }
