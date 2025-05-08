@@ -1,0 +1,28 @@
+server:
+  port: ${PORT:8083}
+
+spring:
+  application:
+    name: actividad
+
+  r2dbc:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    pool:
+      enabled: true
+      max-size: 10
+      initial-size: 2
+      max-idle-time: 30s
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://securetoken.google.com/security-prs1
+
+logging:
+  level:
+    root: INFO
+    org.springframework.kafka: DEBUG
+    pe.edu.vallegrande.report_service: DEBUG
