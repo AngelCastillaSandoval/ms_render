@@ -166,13 +166,26 @@ public class UserService {
         return usersRepository.findById(id)
                 .switchIfEmpty(Mono.error(new RuntimeException("Usuario no encontrado")))
                 .flatMap(user -> {
-                    // Eliminar imagen de Supabase
-                    if (user.getProfileImage() != null) {
-                        return storageService.deleteImage(user.getProfileImage())
-                                .then(usersRepository.deleteById(user.getId()));
-                    } else {
-                        return usersRepository.deleteById(user.getId());
-                    }
+                    String firebaseUid = user.getFirebaseUid();
+
+                    // 1. Eliminar imagen si existe
+                    Mono<Void> imageDeletion = user.getProfileImage() != null
+                            ? storageService.deleteImage(user.getProfileImage())
+                            : Mono.empty();
+
+                    // 2. Eliminar usuario en Firebase
+                    Mono<Void> firebaseDeletion = Mono.fromCallable(() -> {
+                        FirebaseAuth.getInstance().deleteUser(firebaseUid);
+                        return null;
+                    });
+
+                    // 3. Eliminar en base de datos
+                    Mono<Void> dbDeletion = usersRepository.deleteById(user.getId());
+
+                    // ⛓️ Ejecutar todo en orden
+                    return imageDeletion
+                            .then(firebaseDeletion)
+                            .then(dbDeletion);
                 });
     }
 
