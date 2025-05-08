@@ -87,15 +87,31 @@ public class SupabaseStorageService {
     public Mono<Void> deleteImage(String publicUrl) {
         if (!StringUtils.hasText(publicUrl)) return Mono.empty();
 
+        // Extraer la ruta interna del archivo desde la URL pública
         String[] parts = publicUrl.split("/object/public/");
-        if (parts.length < 2) return Mono.empty();
+        if (parts.length < 2) {
+            log.warn("❌ No se pudo obtener la ruta interna desde la URL pública: {}", publicUrl);
+            return Mono.empty();
+        }
 
-        String objectPath = parts[1]; // ruta relativa después de `/object/public/`
+        String fullPath = parts[1]; // Ej: "prs1/users/imagen.png"
+
+        // Quitar el prefijo del bucket si está duplicado
+        String objectPath = fullPath.startsWith(bucket + "/")
+                ? fullPath.substring(bucket.length() + 1)
+                : fullPath;
+
+        log.info("🗑️ Eliminando imagen en Supabase: bucket='{}', path='{}'", bucket, objectPath);
 
         return webClient.delete()
-                .uri(uriBuilder -> uriBuilder.path("/object/{bucket}/{path}")
+                .uri(uriBuilder -> uriBuilder
+                        .path("/object/{bucket}/{path}")
                         .build(bucket, objectPath))
                 .retrieve()
-                .bodyToMono(Void.class);
+                .bodyToMono(Void.class)
+                .onErrorResume(e -> {
+                    log.error("❌ Error al eliminar imagen de Supabase:", e);
+                    return Mono.empty(); // Opcional: no propagar el error
+                });
     }
 }
