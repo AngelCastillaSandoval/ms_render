@@ -44,7 +44,20 @@ public class ReportService {
     private final SupabaseStorageService storageService;
 
     /**
-     * 🔹 Obtener reportes con talleres filtrados por fecha + otros filtros
+     * 🔹 Función para el ordenamiento personalizado por trimestre
+     */
+    private int getTrimesterOrder(String trimester) {
+        return switch (trimester.toLowerCase()) {
+            case "enero-marzo" -> 1;
+            case "abril-junio" -> 2;
+            case "julio-septiembre" -> 3;
+            case "octubre-diciembre" -> 4;
+            default -> 5;
+        };
+    }
+
+    /**
+     * 🔹 Obtener reportes con talleres filtrados por fecha + otros filtros y ordenados
      */
     public Flux<ReportWithWorkshopsDto> findFilteredReports(String status, String trimester, Integer year, LocalDate workshopDateStart, LocalDate workshopDateEnd) {
         Flux<Report> baseQuery = (status != null) ? reportRepo.findByStatus(status) : reportRepo.findAll();
@@ -78,15 +91,12 @@ public class ReportService {
                                         });
                             } else {
                                 boolean inRange = true;
-
                                 if (workshopDateStart != null && rw.getWorkshopDateStart() != null) {
                                     inRange = !rw.getWorkshopDateStart().isBefore(workshopDateStart);
                                 }
-
                                 if (workshopDateEnd != null && rw.getWorkshopDateEnd() != null) {
                                     inRange = inRange && !rw.getWorkshopDateEnd().isAfter(workshopDateEnd);
                                 }
-
                                 return inRange ? Mono.just(dto) : Mono.empty();
                             }
                         })
@@ -98,9 +108,16 @@ public class ReportService {
                             dto.setWorkshops(workshops);
                             return dto;
                         })
-        );
-    }
+        ).sort((r1, r2) -> {
+            int yearCompare = Integer.compare(r2.getReport().getYear(), r1.getReport().getYear()); // Descendente por año
+            if (yearCompare != 0) return yearCompare;
 
+            return Integer.compare(
+                    getTrimesterOrder(r1.getReport().getTrimester()),
+                    getTrimesterOrder(r2.getReport().getTrimester())
+            );
+        });
+    }
 
     /**
      * 🔹 Obtener por ID con talleres filtrados por fechas
