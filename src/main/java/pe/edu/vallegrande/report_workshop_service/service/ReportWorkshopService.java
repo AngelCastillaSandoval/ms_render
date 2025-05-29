@@ -22,6 +22,8 @@ import reactor.core.publisher.Mono;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -209,7 +211,6 @@ public class ReportWorkshopService {
                                 .body(new byte[0]));
                     }
 
-                    // 🔁 Obtener reporte del microservicio maestro
                     return reportClient.findById(reportId)
                             .flatMap(report -> reportWorkshopRepo.findByReportId(reportId)
                                     .filter(rw -> {
@@ -234,7 +235,7 @@ public class ReportWorkshopService {
                                                 dto.setReport_id(report.getId());
                                                 dto.setReport_year(report.getYear());
                                                 dto.setTrimester(report.getTrimester());
-                                                dto.setReport_description(report.getDescriptionUrl());
+                                                dto.setReport_description(report.getDescriptionUrl()); // Es la URL
                                                 dto.setSchedule(report.getScheduleUrl());
                                                 dto.setStatus(report.getStatus());
                                                 dto.setWorkshop_id(workshop.getId());
@@ -244,17 +245,28 @@ public class ReportWorkshopService {
                                                 reportData.add(dto);
                                             }
 
+                                            // 🔁 Leer el HTML desde la URL
+                                            String htmlContent = "";
+                                            try (InputStream htmlStream = new URL(report.getDescriptionUrl()).openStream()) {
+                                                htmlContent = new String(htmlStream.readAllBytes(), StandardCharsets.UTF_8);
+                                            } catch (Exception ex) {
+                                                log.warn("⚠️ No se pudo leer el HTML desde la URL: {}", report.getDescriptionUrl(), ex);
+                                            }
+
+                                            // 🔧 Llenar parámetros
                                             JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(reportData);
                                             Map<String, Object> parameters = new HashMap<>();
                                             parameters.put("ReportTitle", "Reporte de Actividades");
                                             parameters.put("SUBREPORT_DIR", "images/");
+                                            parameters.put("report_description_html_content", htmlContent);
 
+                                            // 📄 Generar PDF
                                             JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);
                                             ByteArrayOutputStream baos = new ByteArrayOutputStream();
                                             JasperExportManager.exportReportToPdfStream(jasperPrint, baos);
                                             byte[] pdfBytes = baos.toByteArray();
 
-                                            // 🔄 Subir a Supabase
+                                            // ☁️ Subir a Supabase
                                             storageService.uploadPdf(folder, fileName, pdfBytes).subscribe();
 
                                             HttpHeaders headers = new HttpHeaders();
@@ -269,7 +281,6 @@ public class ReportWorkshopService {
                             .switchIfEmpty(Mono.error(new NoSuchElementException("Reporte no encontrado con ID: " + reportId)));
                 });
     }
-
 
     private ReportWorkshopDto toDto(ReportWorkshop rw) {
         ReportWorkshopDto dto = new ReportWorkshopDto();
