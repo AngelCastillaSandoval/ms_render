@@ -53,4 +53,4 @@ logging:
     pe.edu.vallegrande.report_service: DEBUG
 
 core-service:
-  url: http://localhost:8088
+  url: https://ms-render-report.onrender.com
