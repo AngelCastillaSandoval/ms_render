@@ -44,7 +44,7 @@ class ReportWorkshopControllerTest {
         report.setId(1);
         report.setYear(2024);
         report.setTrimester("https://supabase.com/reports/html/abril-junio.html");
-        report.setDescription("desc");
+        report.setDescriptionUrl("desc");
         report.setStatus("A");
 
         ReportWorkshopDto workshop = new ReportWorkshopDto();
@@ -84,7 +84,7 @@ class ReportWorkshopControllerTest {
         report.setId(1);
         report.setYear(2024);
         report.setTrimester("abril-junio");
-        report.setDescription("https://supabase.com/reports/html/abril-junio.html");
+        report.setDescriptionUrl("https://supabase.com/reports/html/abril-junio.html");
         report.setStatus("A");
 
         ReportWorkshopDto workshop = new ReportWorkshopDto();

@@ -51,7 +51,7 @@ class ReportWorkshopServiceTest {
         report.setId(1);
         report.setYear(2024);
         report.setTrimester("abril-junio");
-        report.setDescription("https://supabase.com/reports/html/abril-junio.html");
+        report.setDescriptionUrl("https://supabase.com/reports/html/abril-junio.html");
         report.setStatus("A");
 
         // 🔸 Taller personalizado con imágenes de Supabase
@@ -75,7 +75,7 @@ class ReportWorkshopServiceTest {
         savedReport.setId(1);
         savedReport.setYear(2024);
         savedReport.setTrimester("abril-junio");
-        savedReport.setDescription("Reporte trimestral");
+        savedReport.setDescriptionUrl("Reporte trimestral");
         savedReport.setStatus("A");
 
         // 🔸 Mock del taller guardado
@@ -131,7 +131,7 @@ class ReportWorkshopServiceTest {
         report.setId(2);
         report.setYear(2024);
         report.setTrimester("abril-junio");
-        report.setDescription("https://supabase.com/reports/html/abril-junio.html");
+        report.setDescriptionUrl("https://supabase.com/reports/html/abril-junio.html");
         report.setStatus("A");
 
         // 🔸 Taller relacionado
