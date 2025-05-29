@@ -17,10 +17,10 @@ WORKDIR /app
 COPY --from=builder /app/target/*.jar app.jar
 
 # Expone el puerto (Railway asigna uno dinámico con $PORT)
-EXPOSE 8086
+EXPOSE 8088
 
 # Usa el puerto asignado por Railway o 8081 por defecto
-ENV PORT=8086
+ENV PORT=8088
 
 # Comando de ejecución de Spring Boot
 ENTRYPOINT ["java", "-Dserver.port=${PORT}", "-jar", "app.jar"]
