@@ -1,110 +1,80 @@
 package pe.edu.vallegrande.report_service.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import pe.edu.vallegrande.report_service.dto.ReportWithWorkshopsDto;
+import pe.edu.vallegrande.report_service.dto.ReportDto;
 import pe.edu.vallegrande.report_service.service.ReportService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import java.time.LocalDate;
 
+import java.util.Map;
 
-@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/reports")
+@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class ReportController {
 
     private final ReportService service;
 
-    /**
-     * 🔹 Listado con filtros por query params
-     */
+    // 🔍 Listar todos
     @GetMapping
-    public Flux<ReportWithWorkshopsDto> getAll(
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String trimester,
-            @RequestParam(required = false) Integer year,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate workshopDateStart,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate workshopDateEnd
-    ) {
-        return service.findFilteredReports(status, trimester, year, workshopDateStart, workshopDateEnd);
+    public Flux<ReportDto> findAll() {
+        return service.findAll();
     }
 
-    /**
-     * 🔹 Obtener reporte por ID con filtro de fechas
-     */
-    @GetMapping("/{id}/filtered")
-    public Mono<ReportWithWorkshopsDto> getById(
-            @PathVariable Integer id,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate workshopDateStart,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate workshopDateEnd
-    ) {
-        return service.findByIdWithDateFilter(id, workshopDateStart, workshopDateEnd);
+    // 🔍 Buscar por ID
+    // 🔍 Buscar por ID - VERSIÓN SIMPLE
+    @GetMapping("/{id}")
+    public Mono<ResponseEntity<ReportDto>> findById(@PathVariable Integer id) {
+        return service.findById(id)
+                .map(ResponseEntity::ok)
+                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
     }
 
-
-    /**
-     * 🔹 Crear reporte
-     */
+    // ✅ Insertar nuevo reporte
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Mono<ReportWithWorkshopsDto> create(@RequestBody ReportWithWorkshopsDto dto) {
-        return service.create(dto);
+    public Mono<ReportDto> create(@Valid @RequestBody ReportDto dto) {
+        return service.save(dto);
     }
 
-    /**
-     * 🔹 Editar reporte
-     */
+    // 🛠️ Actualizar
     @PutMapping("/{id}")
-    public Mono<ReportWithWorkshopsDto> update(@PathVariable Integer id, @RequestBody ReportWithWorkshopsDto dto) {
+    public Mono<ReportDto> update(@PathVariable Integer id, @Valid @RequestBody ReportDto dto) {
         return service.update(id, dto);
     }
 
-    /**
-     * 🔹 Restaurar reporte
-     */
+    // ❌ Eliminación lógica (status = I)
+    @PutMapping("/disable/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> disable(@PathVariable Integer id) {
+        return service.disable(id);
+    }
+
+    // ♻️ Restaurar lógica (status = A)
     @PutMapping("/restore/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public Mono<Void> restore(@PathVariable Integer id) {
         return service.restore(id);
     }
 
-    /**
-     * 🔹 Eliminación lógica
-     */
+    // 🗑️ Eliminación física
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public Mono<Void> disable(@PathVariable Integer id) {
-        return service.deleteLogic(id);
+    public Mono<Void> delete(@PathVariable Integer id) {
+        return service.delete(id);
     }
 
-    /**
-     * 🔹 Genera PDF
-     */
-    @GetMapping("/{reportId}/pdf")
-    public Mono<ResponseEntity<byte[]>> generatePdfById(
-            @PathVariable Integer reportId,
-            @RequestParam(required = false) LocalDate workshopDateStart,
-            @RequestParam(required = false) LocalDate workshopDateEnd
-    ) {
-        return service.generatePdfByIdWithDateFilter(reportId, workshopDateStart, workshopDateEnd);
-    }
-
-    /**
-     * 🔹 Verifica si existe el reporte
-     */
+    // ❓ Validar si existe un reporte por año y trimestre (usado antes de insertar)
     @GetMapping("/exist")
-    public Mono<ResponseEntity<Boolean>> checkIfExists(
+    public Mono<ResponseEntity<Boolean>> existsByYearAndTrimester(
             @RequestParam Integer year,
             @RequestParam String trimester) {
         return service.existsByYearAndTrimester(year, trimester)
                 .map(ResponseEntity::ok);
     }
-
 }

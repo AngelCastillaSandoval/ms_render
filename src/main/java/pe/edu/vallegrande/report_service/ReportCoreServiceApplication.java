@@ -3,14 +3,12 @@ package pe.edu.vallegrande.report_service;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.kafka.annotation.EnableKafka;
 
 @SpringBootApplication
-@EnableKafka
-public class ReportServiceApplication {
+public class ReportCoreServiceApplication {
 
 	public static void main(String[] args) {
-		// Cargar variables del .env ubicado en la raíz del proyecto
+		// Cargar variables desde archivo .env
 		Dotenv dotenv = Dotenv.configure()
 				.directory(".")
 				.ignoreIfMalformed()
@@ -21,6 +19,6 @@ public class ReportServiceApplication {
 				System.setProperty(entry.getKey(), entry.getValue())
 		);
 
-		SpringApplication.run(ReportServiceApplication.class, args);
+		SpringApplication.run(ReportCoreServiceApplication.class, args);
 	}
 }
