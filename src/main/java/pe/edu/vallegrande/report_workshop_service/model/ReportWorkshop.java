@@ -25,7 +25,6 @@ public class ReportWorkshop {
     @Column("workshop_id")
     private Integer workshopId;
 
-    @NotBlank(message = "El nombre del taller es obligatorio")
     @Column("workshop_name")
     private String workshopName;
 
