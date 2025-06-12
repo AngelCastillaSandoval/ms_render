@@ -35,7 +35,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: https://securetoken.google.com/security-prs1
+          issuer-uri: ${JWT_ISSUER_URI}
+          jwk-set-uri: ${JWT_JWK_SET_URI}
 
   codec:
     max-in-memory-size: 50MB
@@ -53,4 +54,4 @@ logging:
     pe.edu.vallegrande.report_service: DEBUG
 
 core-service:
-  url: https://ms-render-report.onrender.com
+  url: ${CORE_SERVICE_URL}
