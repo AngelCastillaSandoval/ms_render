@@ -36,8 +36,10 @@ public class SecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(auth -> auth
+                        // Permitir preflight CORS sin token
+                        .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // Rutas públicas (ej. Swagger)
+                        // Swagger (libre)
                         .pathMatchers("/swagger-ui.html", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
 
                         // GET: accesible por USER y ADMIN
@@ -49,7 +51,7 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.PUT, "/api/reports-workshop/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.DELETE, "/api/reports-workshop/**").hasRole("ADMIN")
 
-                        // Cualquier otra ruta requiere autenticación
+                        // Todo lo demás requiere estar autenticado
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
