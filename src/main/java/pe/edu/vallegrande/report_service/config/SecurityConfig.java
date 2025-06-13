@@ -37,19 +37,21 @@ public class SecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(auth -> auth
+                        // Permitir preflight CORS (recomendado para evitar errores)
+                        .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // Rutas públicas (Swagger)
+                        // Swagger público
                         .pathMatchers("/swagger-ui.html", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
 
-                        // GET: accesible por USER y ADMIN
+                        // Rutas GET accesibles para USER y ADMIN
                         .pathMatchers(HttpMethod.GET, "/api/reports/**").hasAnyRole("USER", "ADMIN")
 
-                        // POST, PUT, DELETE: solo ADMIN
+                        // Rutas POST, PUT, DELETE solo para ADMIN
                         .pathMatchers(HttpMethod.POST, "/api/reports/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.PUT, "/api/reports/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.DELETE, "/api/reports/**").hasRole("ADMIN")
 
-                        // Cualquier otra ruta requiere autenticación
+                        // Todo lo demás requiere autenticación
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
@@ -62,7 +64,7 @@ public class SecurityConfig {
                         .configurationSource(exchange -> {
                             var config = new org.springframework.web.cors.CorsConfiguration();
                             config.setAllowCredentials(true);
-                            config.addAllowedOrigin("http://localhost:4200");
+                            config.addAllowedOrigin("http://localhost:4200"); // Frontend local
                             config.addAllowedHeader("*");
                             config.addAllowedMethod("*");
                             return config;
