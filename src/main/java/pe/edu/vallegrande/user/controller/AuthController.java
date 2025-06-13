@@ -7,6 +7,7 @@ import pe.edu.vallegrande.user.service.UserService;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/auth")
@@ -18,7 +19,10 @@ public class AuthController {
         this.userService = userService;
     }
 
-    // 🔹 Olvidé mi contraseña
+    /**
+     * 🔐 Enviar enlace de restablecimiento de contraseña al correo proporcionado.
+     * Este endpoint se utiliza cuando un usuario olvidó su contraseña.
+     */
     @PostMapping("/forgot-password")
     public Mono<ResponseEntity<Map<String, String>>> forgotPassword(@RequestBody Map<String, String> body) {
         String email = body.get("email");
@@ -26,11 +30,10 @@ public class AuthController {
         return userService.sendPasswordResetEmail(email)
                 .map(msg -> ResponseEntity.ok(Map.of("message", msg)))
                 .onErrorResume(e -> {
-                    // Puedes devolver 400 (Bad Request) o 404 (Not Found)
+                    // Devuelve 404 si el correo no está registrado en Firebase o en la BD
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.NOT_FOUND)
                             .body(Map.of("error", e.getMessage())));
                 });
     }
-
 }

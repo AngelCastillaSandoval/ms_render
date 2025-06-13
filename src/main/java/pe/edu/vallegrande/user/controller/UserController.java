@@ -1,5 +1,6 @@
 package pe.edu.vallegrande.user.controller;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -12,44 +13,36 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/users")
-public class UserController {
+class UserController {
 
     private final UserService userService;
 
+    @Autowired
     public UserController(UserService userService) {
         this.userService = userService;
     }
-    // 🔍 Obtener mis datos
+
+    /**
+     * 🔍 Obtener mi perfil por UID
+     */
     @GetMapping("/me")
     @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
     public Mono<UserDto> getMyProfile(@AuthenticationPrincipal CustomAuthenticationToken auth) {
-        String uid = auth.getName();
-        return userService.findMyProfile(uid);
-    }
-    // Cambiar la contraseña
-    @PutMapping("/password")
-    public Mono<UserDto> changePassword(@AuthenticationPrincipal CustomAuthenticationToken auth,
-                                        @RequestBody Map<String, String> body) {
-        String newPassword = body.get("newPassword");
-        return userService.changePassword(auth.getName(), newPassword);
-    }
-    // Cambiar el correo
-    @PutMapping("/email")
-    public Mono<UserDto> changeEmail(@AuthenticationPrincipal CustomAuthenticationToken auth,
-                                     @RequestBody Map<String, String> body) {
-        String newEmail = body.get("newEmail");
-        return userService.changeEmail(auth.getName(), newEmail);
+        return userService.findMyProfile(auth.getName());
     }
 
-    // ✏️ Editar mis datos
+    /**
+     * ✏️ Editar mis propios datos (excepto email/password/rol)
+     */
     @PutMapping("/me")
     @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
     public Mono<Map<String, Object>> updateMyProfile(@AuthenticationPrincipal CustomAuthenticationToken auth,
                                                      @RequestBody Map<String, Object> payload) {
-        String firebaseUid = auth.getName();
+        String uid = auth.getName();
         if (payload.get("name") == null || payload.get("lastName") == null || payload.get("documentNumber") == null) {
             return Mono.just(Map.of("error", "Faltan campos obligatorios"));
         }
+
         UserDto dto = new UserDto();
         dto.setName((String) payload.get("name"));
         dto.setLastName((String) payload.get("lastName"));
@@ -57,8 +50,27 @@ public class UserController {
         dto.setDocumentNumber((String) payload.get("documentNumber"));
         dto.setCellPhone((String) payload.get("cellPhone"));
         dto.setProfileImage((String) payload.get("profileImage"));
-        return userService.updateMyProfile(firebaseUid, dto)
-                .map(updated -> Map.of("message", "✅ Perfil actualizado correctamente", "user", updated))
+
+        return userService.updateMyProfile(uid, dto)
+                .map(user -> Map.of("message", "✅ Perfil actualizado correctamente", "user", user))
                 .onErrorResume(e -> Mono.just(Map.of("error", e.getMessage())));
+    }
+
+    /**
+     * 🔁 Cambiar mi contraseña
+     */
+    @PutMapping("/password")
+    public Mono<UserDto> changePassword(@AuthenticationPrincipal CustomAuthenticationToken auth,
+                                        @RequestBody Map<String, String> body) {
+        return userService.changePassword(auth.getName(), body.get("newPassword"));
+    }
+
+    /**
+     * 🔁 Cambiar mi correo electrónico
+     */
+    @PutMapping("/email")
+    public Mono<UserDto> changeEmail(@AuthenticationPrincipal CustomAuthenticationToken auth,
+                                     @RequestBody Map<String, String> body) {
+        return userService.changeEmail(auth.getName(), body.get("newEmail"));
     }
 }

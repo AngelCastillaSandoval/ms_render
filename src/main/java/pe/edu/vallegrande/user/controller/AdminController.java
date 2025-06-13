@@ -9,6 +9,7 @@ import pe.edu.vallegrande.user.dto.UserDto;
 import pe.edu.vallegrande.user.service.UserService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/admin/users")
@@ -42,29 +43,26 @@ public class AdminController {
         return userService.findByEmail(email);
     }
 
-    // 🆕 Crear usuario en Firebase + BD
+    // 🆕 Crear usuario
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public Mono<UserDto> createUser(@RequestBody UserCreateDto dto) {
         return userService.createUser(dto);
     }
 
-    // ✏️ Actualizar usuario (excepto email y password)
+    // ✏️ Actualizar usuario
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public Mono<UserDto> updateUser(@PathVariable Integer id, @RequestBody UserDto dto) {
         return userService.updateUser(id, dto);
     }
 
-    // 🗑️ Eliminar usuario de Firebase + BD
+    // 🗑️ Eliminar usuario
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public Mono<ResponseEntity<Void>> deleteUser(@PathVariable Integer id) {
         return userService.deleteUser(id)
-                .thenReturn(ResponseEntity.noContent().<Void>build()) // 204 sin contenido
-                .onErrorResume(e -> {
-                    System.err.println("❌ Error al eliminar usuario: " + e.getMessage());
-                    return Mono.just(ResponseEntity.status(400).<Void>build()); // 👈 forzamos tipo Void
-                });
+                .thenReturn(ResponseEntity.noContent().<Void>build())
+                .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().<Void>build()));
     }
 }

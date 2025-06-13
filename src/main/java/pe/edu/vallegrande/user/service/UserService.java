@@ -2,20 +2,18 @@ package pe.edu.vallegrande.user.service;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.UserRecord.CreateRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import lombok.extern.slf4j.Slf4j;
-
 import pe.edu.vallegrande.user.dto.UserCreateDto;
 import pe.edu.vallegrande.user.dto.UserDto;
 import pe.edu.vallegrande.user.model.User;
 import pe.edu.vallegrande.user.repository.UsersRepository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.Map;
-
 
 @Slf4j
 @Service
@@ -24,26 +22,25 @@ public class UserService {
     private final UsersRepository usersRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
-    private final SupabaseStorageService storageService;
-
 
     @Autowired
     public UserService(UsersRepository usersRepository, PasswordEncoder passwordEncoder,
-                       EmailService emailService, SupabaseStorageService storageService) {
+                       EmailService emailService) {
         this.usersRepository = usersRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
-        this.storageService = storageService;
     }
 
     /**
-     * 🔹 Guardar nuevo usuario en firebase como en la bd
+     * Crear un nuevo usuario: registra en Firebase y luego en la base de datos.
      */
     public Mono<UserDto> createUser(UserCreateDto dto) {
-        return usersRepository.findByEmail(dto.getEmail())
-                .flatMap(existing -> Mono.error(new IllegalArgumentException("El correo ya está en uso.")))
-                .switchIfEmpty(Mono.defer(() -> {
-                    // 🔐 Crear usuario en Firebase
+        return emailExists(dto.getEmail())
+                .flatMap(exists -> {
+                    if (exists) {
+                        return Mono.error(new IllegalArgumentException("❌ El correo ya está registrado."));
+                    }
+
                     CreateRequest request = new CreateRequest()
                             .setEmail(dto.getEmail())
                             .setPassword(dto.getPassword())
@@ -53,86 +50,51 @@ public class UserService {
                     return Mono.fromCallable(() -> FirebaseAuth.getInstance().createUser(request))
                             .flatMap(firebaseUser -> {
                                 String uid = firebaseUser.getUid();
-
-                                // Asignar claim
                                 String primaryRole = dto.getRole().isEmpty() ? "USER" : dto.getRole().get(0);
                                 return Mono.fromCallable(() -> {
                                     FirebaseAuth.getInstance().setCustomUserClaims(uid, Map.of("role", primaryRole.toUpperCase()));
                                     return uid;
-                                }).cast(String.class);
+                                });
                             })
                             .flatMap(uid -> {
-                                // Subir imagen a Supabase
-                                return storageService.uploadBase64Image("users", dto.getProfileImage())
-                                        .flatMap(imageUrl -> {
-                                            // Guardar en BD
-                                            User user = new User();
-                                            user.setFirebaseUid(uid);
-                                            user.setName(dto.getName());
-                                            user.setLastName(dto.getLastName());
-                                            user.setDocumentType(dto.getDocumentType());
-                                            user.setDocumentNumber(dto.getDocumentNumber());
-                                            user.setCellPhone(dto.getCellPhone());
-                                            user.setEmail(dto.getEmail());
-                                            user.setPassword(passwordEncoder.encode(dto.getPassword()));
-                                            user.setRole(dto.getRole());
-                                            user.setProfileImage(imageUrl); // Guardar URL de la imagen
-
-                                            return usersRepository.save(user)
-                                                    .map(this::toDto)
-                                                    .cast(UserDto.class);
-                                        });
+                                User user = new User();
+                                user.setFirebaseUid(uid);
+                                user.setName(dto.getName());
+                                user.setLastName(dto.getLastName());
+                                user.setDocumentType(dto.getDocumentType());
+                                user.setDocumentNumber(dto.getDocumentNumber());
+                                user.setCellPhone(dto.getCellPhone());
+                                user.setEmail(dto.getEmail());
+                                user.setPassword(passwordEncoder.encode(dto.getPassword()));
+                                user.setRole(dto.getRole());
+                                user.setProfileImage(dto.getProfileImage());
+                                return usersRepository.save(user).map(this::toDto);
                             });
-                })).cast(UserDto.class);
+                });
     }
 
     /**
-     * 🔹 Actualizar usuario
+     * Actualiza datos de un usuario por ID, sin modificar email ni contraseña.
      */
     public Mono<UserDto> updateUser(Integer id, UserDto dto) {
         return usersRepository.findById(id)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Usuario no encontrado")))
                 .flatMap(existing -> {
-                    boolean roleChanged = !existing.getRole().equals(dto.getRole());
-
-                    // Actualizar campos editables
                     existing.setName(dto.getName());
                     existing.setLastName(dto.getLastName());
                     existing.setDocumentType(dto.getDocumentType());
                     existing.setDocumentNumber(dto.getDocumentNumber());
                     existing.setCellPhone(dto.getCellPhone());
                     existing.setRole(dto.getRole());
-
-                    String newImage = dto.getProfileImage();
-
-                    if (newImage != null) {
-                        if (!newImage.isEmpty()) {
-                            // Subir nueva imagen, eliminar la anterior si existe
-                            if (existing.getProfileImage() != null) {
-                                storageService.deleteImage(existing.getProfileImage()).subscribe();
-                            }
-                            return storageService.uploadBase64Image("users", newImage)
-                                    .flatMap(imageUrl -> {
-                                        existing.setProfileImage(imageUrl);
-                                        return usersRepository.save(existing).map(this::toDto);
-                                    });
-                        } else {
-                            // ⚠️ Imagen es "", entonces eliminar imagen actual
-                            if (existing.getProfileImage() != null) {
-                                storageService.deleteImage(existing.getProfileImage()).subscribe();
-                                existing.setProfileImage(null); // eliminar imagen
-                            }
-                            return usersRepository.save(existing).map(this::toDto);
-                        }
-                    } else {
-                        // Imagen no se tocó → mantener la existente
-                        return usersRepository.save(existing).map(this::toDto);
+                    if (dto.getProfileImage() != null && !dto.getProfileImage().isEmpty()) {
+                        existing.setProfileImage(dto.getProfileImage());
                     }
+                    return usersRepository.save(existing).map(this::toDto);
                 });
     }
 
     /**
-     * 🔹 Obtener mis datos
+     * Devuelve los datos del usuario actual por su UID de Firebase.
      */
     public Mono<UserDto> findMyProfile(String firebaseUid) {
         return usersRepository.findAll()
@@ -143,61 +105,52 @@ public class UserService {
     }
 
     /**
-     * 🔹 Obtener todos los usuarios
+     * Devuelve todos los usuarios registrados.
      */
     public Flux<UserDto> findAllUsers() {
-        return usersRepository.findAll()
-                .map(this::toDto);
+        return usersRepository.findAll().map(this::toDto);
     }
 
     /**
-     * 🔹 Buscar por ID
+     * Devuelve un usuario por su ID.
      */
     public Mono<UserDto> findById(Integer id) {
-        return usersRepository.findById(id)
-                .map(this::toDto);
+        return usersRepository.findById(id).map(this::toDto);
     }
 
     /**
-     * 🔹 Buscar por email
+     * Devuelve un usuario por su email.
      */
     public Mono<UserDto> findByEmail(String email) {
-        return usersRepository.findByEmail(email)
-                .map(this::toDto);
+        return usersRepository.findByEmail(email).map(this::toDto);
     }
 
     /**
-     * 🔹 Eliminar por ID
+     * Verifica si un email ya está registrado.
+     */
+    public Mono<Boolean> emailExists(String email) {
+        return findByEmail(email).hasElement();
+    }
+
+    /**
+     * Elimina un usuario por ID de Firebase y la base de datos.
      */
     public Mono<Void> deleteUser(Integer id) {
         return usersRepository.findById(id)
                 .switchIfEmpty(Mono.error(new RuntimeException("Usuario no encontrado")))
                 .flatMap(user -> {
                     String firebaseUid = user.getFirebaseUid();
-
-                    // 1. Eliminar imagen si existe
-                    Mono<Void> imageDeletion = user.getProfileImage() != null
-                            ? storageService.deleteImage(user.getProfileImage())
-                            : Mono.empty();
-
-                    // 2. Eliminar usuario en Firebase
                     Mono<Void> firebaseDeletion = Mono.fromCallable(() -> {
                         FirebaseAuth.getInstance().deleteUser(firebaseUid);
                         return null;
                     });
-
-                    // 3. Eliminar en base de datos
                     Mono<Void> dbDeletion = usersRepository.deleteById(user.getId());
-
-                    // ⛓️ Ejecutar todo en orden
-                    return imageDeletion
-                            .then(firebaseDeletion)
-                            .then(dbDeletion);
+                    return firebaseDeletion.then(dbDeletion);
                 });
     }
 
     /**
-     * 🔹 Cambiar Email
+     * Cambia el email del usuario en Firebase y en la base de datos.
      */
     public Mono<UserDto> changeEmail(String firebaseUid, String newEmail) {
         return usersRepository.findAll()
@@ -206,17 +159,13 @@ public class UserService {
                 .switchIfEmpty(Mono.error(new RuntimeException("Usuario no encontrado")))
                 .flatMap(user -> usersRepository.findByEmail(newEmail)
                         .flatMap(conflict -> Mono.error(new RuntimeException("El correo ya está en uso")))
-                        .switchIfEmpty(Mono.defer(() ->
-                                // 🔐 Cambiar en Firebase
-                                Mono.fromCallable(() -> {
-                                    FirebaseAuth.getInstance().updateUser(
-                                            new com.google.firebase.auth.UserRecord.UpdateRequest(firebaseUid)
-                                                    .setEmail(newEmail)
-                                    );
-                                    return user;
-                                })
-                        ))
-                )
+                        .switchIfEmpty(Mono.defer(() -> Mono.fromCallable(() -> {
+                            FirebaseAuth.getInstance().updateUser(
+                                    new com.google.firebase.auth.UserRecord.UpdateRequest(firebaseUid)
+                                            .setEmail(newEmail)
+                            );
+                            return user;
+                        }))))
                 .flatMap(obj -> {
                     User user = (User) obj;
                     user.setEmail(newEmail);
@@ -225,49 +174,41 @@ public class UserService {
 
     }
 
-
-
     /**
-     * 🔹 Cambiar Contraseña
+     * Cambia la contraseña en Firebase y la actualiza en la base de datos.
      */
     public Mono<UserDto> changePassword(String firebaseUid, String newPassword) {
         return usersRepository.findAll()
                 .filter(user -> firebaseUid.equals(user.getFirebaseUid()))
                 .next()
                 .switchIfEmpty(Mono.error(new RuntimeException("Usuario no encontrado")))
+                .flatMap(user -> Mono.fromCallable(() -> {
+                    FirebaseAuth.getInstance().updateUser(
+                            new com.google.firebase.auth.UserRecord.UpdateRequest(firebaseUid)
+                                    .setPassword(newPassword)
+                    );
+                    return user;
+                }))
                 .flatMap(user -> {
-                    // 🔐 Cambiar en Firebase
-                    return Mono.fromCallable(() -> {
-                        FirebaseAuth.getInstance().updateUser(
-                                new com.google.firebase.auth.UserRecord.UpdateRequest(firebaseUid)
-                                        .setPassword(newPassword)
-                        );
-                        return user;
-                    });
-                })
-                .flatMap(user -> {
-                    // 🔄 Cambiar en BD
                     user.setPassword(passwordEncoder.encode(newPassword));
                     return usersRepository.save(user).map(this::toDto);
                 });
     }
 
     /**
-     * 🔹 Reestablecer Contraseña si te olvidaste
+     * Envía un correo con enlace para reestablecer contraseña.
      */
     public Mono<String> sendPasswordResetEmail(String email) {
         return Mono.fromCallable(() -> FirebaseAuth.getInstance().getUserByEmail(email))
-                .flatMap(userRecord ->
-                        usersRepository.findByEmail(email) // ✅ valida también en tu BD
-                                .switchIfEmpty(Mono.error(new RuntimeException("❌ El email no está registrado en el sistema.")))
-                                .flatMap(user -> Mono.fromCallable(() -> {
-                                    String link = FirebaseAuth.getInstance().generatePasswordResetLink(email);
-                                    emailService.sendResetLink(email, link); // ✉️ Envía el correo
-                                    return "✅ Enlace enviado correctamente a: " + email;
-                                }))
-                )
+                .flatMap(userRecord -> usersRepository.findByEmail(email)
+                        .switchIfEmpty(Mono.error(new RuntimeException("❌ El email no está registrado en el sistema.")))
+                        .flatMap(user -> Mono.fromCallable(() -> {
+                            String link = FirebaseAuth.getInstance().generatePasswordResetLink(email);
+                            emailService.sendResetLink(email, link);
+                            return "✅ Enlace enviado correctamente a: " + email;
+                        })))
                 .onErrorResume(e -> {
-                    log.error("❌ Error real desde Firebase: ", e); // <-- importante
+                    log.error("❌ Error real desde Firebase: ", e);
                     String msg = e.getMessage().contains("NOT_FOUND")
                             ? "❌ El correo no existe en Firebase"
                             : "⚠️ Error: " + e.getMessage();
@@ -276,7 +217,7 @@ public class UserService {
     }
 
     /**
-     * 🔄 Editar mis propios datos (sin cambiar email, password ni rol)
+     * Permite al usuario editar su propio perfil sin cambiar email, password ni rol.
      */
     public Mono<UserDto> updateMyProfile(String uid, UserDto updatedData) {
         return usersRepository.findByFirebaseUid(uid)
@@ -290,11 +231,11 @@ public class UserService {
                     existing.setProfileImage(updatedData.getProfileImage());
                     return usersRepository.save(existing);
                 })
-                .map(UserDto::fromEntity); // o usar tu mapper si tienes uno
+                .map(UserDto::fromEntity);
     }
 
     /**
-     * 🔁 Método auxiliar: Entity → DTO
+     * Convierte la entidad User a UserDto
      */
     private UserDto toDto(User user) {
         return new UserDto(

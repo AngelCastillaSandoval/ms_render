@@ -13,18 +13,27 @@ public class EmailService {
     private JavaMailSender mailSender;
 
     public void sendResetLink(String to, String resetLink) {
+        if (to == null || !to.contains("@")) {
+            throw new IllegalArgumentException("Correo inválido");
+        }
+
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(to);
         message.setSubject("🔒 Restablece tu contraseña");
         message.setText("Hola,\n\nHaz clic en el siguiente enlace para restablecer tu contraseña:\n\n" + resetLink + "\n\nSi no solicitaste esto, ignora este mensaje.");
 
         String senderEmail = ((JavaMailSenderImpl) mailSender).getUsername();
+        message.setFrom(senderEmail);
 
-        System.out.println("📧 Enviando desde: " + senderEmail);
-        System.out.println("📨 Enviando a: " + to);
-        System.out.println("🔗 Link: " + resetLink);
-
-        mailSender.send(message);
-        System.out.println("✅ Correo enviado correctamente.");
+        try {
+            System.out.println("📧 Enviando desde: " + senderEmail);
+            System.out.println("📨 Enviando a: " + to);
+            System.out.println("🔗 Link: " + resetLink);
+            mailSender.send(message);
+            System.out.println("✅ Correo enviado correctamente.");
+        } catch (Exception e) {
+            System.err.println("❌ Error al enviar correo: " + e.getMessage());
+        }
     }
 }
+
