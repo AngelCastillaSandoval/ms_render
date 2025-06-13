@@ -43,6 +43,16 @@ public class AdminController {
         return userService.findByEmail(email);
     }
 
+    // ✅ Verificar si un email ya está registrado
+    @GetMapping("/email-exists/{email}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Mono<ResponseEntity<Boolean>> checkIfEmailExists(@PathVariable String email) {
+        return userService.emailExists(email)
+                .map(ResponseEntity::ok)
+                .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().body(false)));
+    }
+
+
     // 🆕 Crear usuario
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
