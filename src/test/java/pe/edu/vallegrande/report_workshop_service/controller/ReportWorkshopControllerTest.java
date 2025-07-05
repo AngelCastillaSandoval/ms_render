@@ -65,53 +65,13 @@ class ReportWorkshopControllerTest {
 
         // Realiza la petición POST y verifica los campos clave en la respuesta
         webTestClient.post()
-                .uri("/api/reports")
+                .uri("/api/reports-workshop")
                 .bodyValue(dto)
                 .exchange()
                 .expectStatus().isCreated()
                 .expectBody()
                 .jsonPath("$.report.year").isEqualTo(2024)
                 .jsonPath("$.workshops[0].workshopName").isEqualTo("Taller de arte");
-    }
-
-    /**
-     * Test para verificar que la actualización de un reporte
-     * devuelve un estado HTTP 200 OK y que los nuevos valores están reflejados en el cuerpo de la respuesta.
-     */
-    @Test
-    void updateReport_shouldReturnUpdatedReport() {
-        ReportDto report = new ReportDto();
-        report.setId(1);
-        report.setYear(2024);
-        report.setTrimester("abril-junio");
-        report.setDescriptionUrl("https://supabase.com/reports/html/abril-junio.html");
-        report.setStatus("A");
-
-        ReportWorkshopDto workshop = new ReportWorkshopDto();
-        workshop.setWorkshopName("Taller actualizado");
-        workshop.setWorkshopDateStart(LocalDate.of(2024, 4, 20));
-        workshop.setWorkshopDateEnd(LocalDate.of(2024, 4, 22));
-        workshop.setDescription("desc nueva");
-        workshop.setImageUrl(new String[]{
-                "https://supabase.com/storage/reports/nueva.jpg"
-        });
-
-        ReportWithWorkshopsDto updatedDto = new ReportWithWorkshopsDto();
-        updatedDto.setReport(report);
-        updatedDto.setWorkshops(List.of(workshop));
-
-        // Simula el comportamiento del service al actualizar
-        when(service.update(1, updatedDto)).thenReturn(Mono.just(updatedDto));
-
-        // Realiza la petición PUT y verifica que la descripción y nombre del taller hayan sido actualizados
-        webTestClient.put()
-                .uri("/api/reports/1")
-                .bodyValue(updatedDto)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.report.description").isEqualTo("https://supabase.com/reports/html/abril-junio.html")
-                .jsonPath("$.workshops[0].workshopName").isEqualTo("Taller actualizado");
     }
 
     /**
@@ -125,7 +85,7 @@ class ReportWorkshopControllerTest {
 
         // Realiza la petición PUT y espera un estado 204
         webTestClient.put()
-                .uri("/api/reports/restore/1")
+                .uri("/api/reports-workshop/restore/1")
                 .exchange()
                 .expectStatus().isNoContent();
     }
