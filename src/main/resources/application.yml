@@ -1,57 +1,89 @@
+# Configura el puerto del servidor
 server:
   port: ${PORT:8086}
 
 spring:
   application:
-    name: report-workshop-service
+    name: report-workshop-service  # Nombre del microservicio
 
   r2dbc:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     pool:
-      enabled: true
-      max-size: 10
-      initial-size: 2
-      max-idle-time: 30s
+      enabled: true               # Activa el pool de conexiones
+      max-size: 10                # Máximo de conexiones en el pool
+      initial-size: 2             # Conexiones iniciales
+      max-idle-time: 30s          # Tiempo máximo inactivo
 
-  kafka:
-    bootstrap-servers: ${BOOTSTRAP_SERVER}
-    properties:
-      security.protocol: SASL_SSL
-      sasl.mechanism: PLAIN
-      sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
-    consumer:
-      group-id: report-workshop-service
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      enable-auto-commit: false
-      auto-offset-reset: earliest
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  codec:
+    max-in-memory-size: 50MB      # Tamaño máximo en memoria para procesamiento (ej. HTML largo)
 
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${JWT_ISSUER_URI}
-          jwk-set-uri: ${JWT_JWK_SET_URI}
+          issuer-uri: ${JWT_ISSUER_URI}      # URL del emisor JWT (Firebase)
+          jwk-set-uri: ${JWT_JWK_SET_URI}    # URL para obtener las claves públicas
 
-  codec:
-    max-in-memory-size: 50MB
+  kafka:
+    consumer:
+      group-id: fallback-group                # Grupo de consumidor por defecto
+      auto-offset-reset: earliest            # Inicia desde el principio si no hay offset guardado
 
+# Kafka: Configuración para consumir eventos de persona (otro clúster)
+person-kafka:
+  bootstrap-servers: ${KAFKA_PERSON_BOOTSTRAP}
+  topic: person-events
+  username: ${KAFKA_PERSON_USERNAME}
+  password: ${KAFKA_PERSON_PASSWORD}
+  group-id: report-workshop-person-group
+
+# Kafka: Eventos de asistencia (cluster compartido)
+attendance-kafka:
+  bootstrap-servers: ${KAFKA_ATTENDANCE_BOOTSTRAP}
+  topic: attendance-events
+  username: ${KAFKA_ATTENDANCE_USERNAME}
+  password: ${KAFKA_ATTENDANCE_PASSWORD}
+  group-id: report-workshop-attendance-group
+
+# Kafka: Eventos de talleres (mismo clúster que asistencia)
+workshop-kafka:
+  bootstrap-servers: ${KAFKA_ATTENDANCE_BOOTSTRAP}
+  topic: workshop-events
+  username: ${KAFKA_ATTENDANCE_USERNAME}
+  password: ${KAFKA_ATTENDANCE_PASSWORD}
+  group-id: report-workshop-workshop-group
+
+# Kafka: Eventos de temas (issues) — también mismo clúster
+issue-kafka:
+  bootstrap-servers: ${KAFKA_ATTENDANCE_BOOTSTRAP}
+  topic: issue-events
+  username: ${KAFKA_ATTENDANCE_USERNAME}
+  password: ${KAFKA_ATTENDANCE_PASSWORD}
+  group-id: report-workshop-issue-group
+
+# Supabase Storage: Parámetros de conexión y bucket para imágenes y archivos
 supabase:
   project-url: ${SUPABASE_PROJECT_URL}
   api-key: ${SUPABASE_API_KEY}
   bucket: ${SUPABASE_BUCKET}
   folder: ${SUPABASE_FOLDER}
 
+# Microservicio maestro que se comunica vía WebClient
+core-service:
+  url: ${CORE_SERVICE_URL}
+
+# Nivel de logs: DEBUG para Kafka y el microservicio
 logging:
   level:
     root: INFO
     org.springframework.kafka: DEBUG
     pe.edu.vallegrande.report_service: DEBUG
 
-core-service:
-  url: ${CORE_SERVICE_URL}
+# Google Slides: Configuración de credenciales y plantilla base
+google:
+  credentials:
+    base64: ${GOOGLE_CREDENTIALS_BASE64}   # Ruta al archivo JSON de la cuenta de servicio
+  template:
+    id: ${GOOGLE_TEMPLATE_ID}          # ID de la plantilla base de Google Slides

@@ -2,30 +2,25 @@ package pe.edu.vallegrande.report_workshop_service.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.sf.jasperreports.engine.*;
-import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
-import net.sf.jasperreports.engine.util.JRLoader;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import pe.edu.vallegrande.report_workshop_service.dto.*;
-import pe.edu.vallegrande.report_workshop_service.model.ReportWorkshop;
+import pe.edu.vallegrande.report_workshop_service.dto.ReportAttendanceSummaryDto;
+import pe.edu.vallegrande.report_workshop_service.dto.ReportWithWorkshopsDto;
+import pe.edu.vallegrande.report_workshop_service.dto.ReportWorkshopDto;
+import pe.edu.vallegrande.report_workshop_service.model.*;
+import pe.edu.vallegrande.report_workshop_service.repository.ReportAttendanceSummaryRepository;
 import pe.edu.vallegrande.report_workshop_service.repository.ReportWorkshopRepository;
-import pe.edu.vallegrande.report_workshop_service.repository.WorkshopCacheRepository;
+import pe.edu.vallegrande.report_workshop_service.repository.cache.AttendanceCacheRepository;
+import pe.edu.vallegrande.report_workshop_service.repository.cache.IssueCacheRepository;
+import pe.edu.vallegrande.report_workshop_service.repository.cache.PersonCacheRepository;
+import pe.edu.vallegrande.report_workshop_service.repository.cache.WorkshopCacheRepository;
 import pe.edu.vallegrande.report_workshop_service.webclient.ReportCoreClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -35,8 +30,12 @@ public class ReportWorkshopService {
     private final ReportCoreClient reportClient;
     private final ReportWorkshopRepository reportWorkshopRepo;
     private final WorkshopCacheRepository workshopCacheRepo;
-    private final SupabaseStorageService storageService;
+    private final PersonCacheRepository personCacheRepo;
+    private final AttendanceCacheRepository attendanceRepo;
+    private final ReportAttendanceSummaryRepository summaryRepo;
+    private final IssueCacheRepository issueCacheRepo;
 
+    // Devuelve el orden numérico del trimestre para ordenar reportes
     private int getTrimesterOrder(String trimester) {
         return switch (trimester.toLowerCase()) {
             case "enero-marzo" -> 1;
@@ -47,6 +46,7 @@ public class ReportWorkshopService {
         };
     }
 
+    // Lista reportes filtrados por estado, trimestre, año y fechas de talleres
     public Flux<ReportWithWorkshopsDto> findFilteredReports(String status, String trimester, Integer year, LocalDate workshopDateStart, LocalDate workshopDateEnd) {
         return reportClient.findAll()
                 .filter(r -> status == null || status.equalsIgnoreCase(r.getStatus()))
@@ -67,6 +67,7 @@ public class ReportWorkshopService {
                         .thenComparing(r -> getTrimesterOrder(r.getReport().getTrimester())));
     }
 
+    // Busca un reporte por ID incluyendo sus talleres filtrados por fechas
     public Mono<ReportWithWorkshopsDto> findByIdWithDateFilter(Integer id, LocalDate workshopDateStart, LocalDate workshopDateEnd) {
         return reportClient.findById(id)
                 .flatMap(report -> reportWorkshopRepo.findByReportId(id)
@@ -80,24 +81,37 @@ public class ReportWorkshopService {
                         }));
     }
 
+    // Construye el DTO de taller y agrega resumen de asistencia si corresponde
     private Mono<ReportWorkshopDto> buildDtoWithDateFilter(ReportWorkshop rw, LocalDate workshopDateStart, LocalDate workshopDateEnd) {
         ReportWorkshopDto dto = toDto(rw);
 
         if (rw.getWorkshopId() != null) {
             return workshopCacheRepo.findById(rw.getWorkshopId())
-                    .filter(wc -> {
+                    .flatMap(wc -> {
                         boolean inRange = true;
-                        if (workshopDateStart != null) inRange = !wc.getDateStart().isBefore(workshopDateStart);
-                        if (workshopDateEnd != null) inRange = inRange && !wc.getDateEnd().isAfter(workshopDateEnd);
-                        return inRange;
-                    })
-                    .map(wc -> {
-                        dto.setWorkshopStatus(wc.getStatus());
-                        dto.setWorkshopDateStart(wc.getDateStart());
-                        dto.setWorkshopDateEnd(wc.getDateEnd());
+                        if (workshopDateStart != null) inRange = !wc.getStartDate().isBefore(workshopDateStart);
+                        if (workshopDateEnd != null) inRange = inRange && !wc.getEndDate().isAfter(workshopDateEnd);
+                        if (!inRange) return Mono.empty();
+
+                        dto.setWorkshopStatus(wc.getState());
+                        dto.setWorkshopDateStart(wc.getStartDate());
+                        dto.setWorkshopDateEnd(wc.getEndDate());
                         dto.setWorkshopName(wc.getName());
-                        return dto;
-                    });
+
+                        return summaryRepo.findByReportWorkshopId(rw.getId())
+                                .collectList()
+                                .map(summaries -> {
+                                    dto.setAttendanceSummaries(summaries.stream().map(this::toDto).toList());
+                                    return dto;
+                                });
+                    })
+                    // Si no está en el cache, igual carga el resumen de la base
+                    .switchIfEmpty(summaryRepo.findByReportWorkshopId(rw.getId())
+                            .collectList()
+                            .map(summaries -> {
+                                dto.setAttendanceSummaries(summaries.stream().map(this::toDto).toList());
+                                return dto;
+                            }));
         } else {
             boolean inRange = true;
             if (workshopDateStart != null && rw.getWorkshopDateStart() != null) {
@@ -110,27 +124,10 @@ public class ReportWorkshopService {
         }
     }
 
+    // Crea un nuevo reporte con talleres y resumen de asistencia (si tiene workshopId)
     public Mono<ReportWithWorkshopsDto> create(ReportWithWorkshopsDto dto) {
         return reportClient.create(dto.getReport())
-                .flatMap(savedReport -> Flux.fromIterable(dto.getWorkshops())
-                        .flatMap(workshopDto -> {
-                            ReportWorkshop rw = fromDto(workshopDto);
-                            rw.setReportId(savedReport.getId());
-
-                            if (rw.getWorkshopId() != null) {
-                                return workshopCacheRepo.findById(rw.getWorkshopId())
-                                        .map(cache -> {
-                                            rw.setWorkshopName(cache.getName());
-                                            rw.setWorkshopDateStart(cache.getDateStart());
-                                            rw.setWorkshopDateEnd(cache.getDateEnd());
-                                            return rw;
-                                        });
-                            }
-                            return Mono.just(rw);
-                        })
-                        .collectList()
-                        .flatMapMany(reportWorkshopRepo::saveAll)
-                        .collectList()
+                .flatMap(savedReport -> saveWorkshops(savedReport.getId(), dto.getWorkshops()).collectList()
                         .map(savedWorkshops -> {
                             ReportWithWorkshopsDto result = new ReportWithWorkshopsDto();
                             result.setReport(savedReport);
@@ -140,28 +137,11 @@ public class ReportWorkshopService {
                 );
     }
 
+    // Actualiza un reporte y reemplaza sus talleres y resúmenes
     public Mono<ReportWithWorkshopsDto> update(Integer id, ReportWithWorkshopsDto dto) {
         return reportClient.update(id, dto.getReport())
                 .flatMap(updatedReport -> reportWorkshopRepo.deleteByReportId(id)
-                        .thenMany(Flux.fromIterable(dto.getWorkshops()))
-                        .flatMap(workshopDto -> {
-                            ReportWorkshop rw = fromDto(workshopDto);
-                            rw.setReportId(id);
-
-                            if (rw.getWorkshopId() != null) {
-                                return workshopCacheRepo.findById(rw.getWorkshopId())
-                                        .map(cache -> {
-                                            rw.setWorkshopName(cache.getName());
-                                            rw.setWorkshopDateStart(cache.getDateStart());
-                                            rw.setWorkshopDateEnd(cache.getDateEnd());
-                                            return rw;
-                                        });
-                            }
-                            return Mono.just(rw);
-                        })
-                        .collectList()
-                        .flatMapMany(reportWorkshopRepo::saveAll)
-                        .collectList()
+                        .then(saveWorkshops(id, dto.getWorkshops()).collectList())
                         .map(savedWorkshops -> {
                             ReportWithWorkshopsDto result = new ReportWithWorkshopsDto();
                             result.setReport(updatedReport);
@@ -171,130 +151,99 @@ public class ReportWorkshopService {
                 );
     }
 
+    // Desactiva un reporte
     public Mono<Void> disable(Integer id) {
         return reportClient.disable(id);
     }
 
+    // Restaura un reporte desactivado
     public Mono<Void> restore(Integer id) {
         return reportClient.restore(id);
     }
 
+    // Elimina un reporte con sus talleres y resúmenes asociados
     public Mono<Void> delete(Integer id) {
-        return reportClient.delete(id)
-                .then(reportWorkshopRepo.deleteByReportId(id));
+        return reportWorkshopRepo.findByReportId(id)
+                .map(ReportWorkshop::getId)
+                .collectList()
+                .flatMapMany(summaryRepo::deleteByReportWorkshopIdIn)
+                .then(reportWorkshopRepo.deleteByReportId(id))
+                .then(reportClient.delete(id));
     }
 
-    /**
-     * 🔹 Generación de PDF de reporte por ID con filtro de fechas
-     */
-    public Mono<ResponseEntity<byte[]>> generatePdfByIdWithDateFilter(Integer reportId, LocalDate workshopDateStart, LocalDate workshopDateEnd) {
-        String folder = "pdf";
-        StringBuilder fileNameBuilder = new StringBuilder("reporte_" + reportId);
-        if (workshopDateStart != null) {
-            fileNameBuilder.append("_from_").append(workshopDateStart);
-        }
-        if (workshopDateEnd != null) {
-            fileNameBuilder.append("_to_").append(workshopDateEnd);
-        }
-        fileNameBuilder.append(".pdf");
+    // Guarda los talleres del reporte, con resumen si corresponde
+    private Flux<ReportWorkshop> saveWorkshops(Integer reportId, List<ReportWorkshopDto> dtos) {
+        return Flux.fromIterable(dtos)
+                .flatMap(dto -> {
+                    ReportWorkshop rw = fromDto(dto);
+                    rw.setReportId(reportId);
 
-        String fileName = fileNameBuilder.toString();
-
-        return storageService.fileExists(folder, fileName)
-                .flatMap(exists -> {
-                    if (exists) {
-                        String url = storageService.getPublicUrl(folder, fileName);
-                        HttpHeaders headers = new HttpHeaders();
-                        headers.setLocation(URI.create(url));
-                        return Mono.just(ResponseEntity.status(HttpStatus.FOUND)
-                                .headers(headers)
-                                .body(new byte[0]));
+                    if (rw.getWorkshopId() != null) {
+                        return buildWithSummary(rw);
                     }
-
-                    return reportClient.findById(reportId)
-                            .flatMap(report -> reportWorkshopRepo.findByReportId(reportId)
-                                    .filter(rw -> {
-                                        boolean inRange = true;
-                                        if (workshopDateStart != null && rw.getWorkshopDateStart() != null) {
-                                            inRange = !rw.getWorkshopDateStart().isBefore(workshopDateStart);
-                                        }
-                                        if (workshopDateEnd != null && rw.getWorkshopDateEnd() != null) {
-                                            inRange = inRange && !rw.getWorkshopDateEnd().isAfter(workshopDateEnd);
-                                        }
-                                        return inRange;
-                                    })
-                                    .collectList()
-                                    .flatMap(filteredWorkshops -> {
-                                        try {
-                                            InputStream inputStream = new ClassPathResource("reportPDF.jasper").getInputStream();
-                                            JasperReport jasperReport = (JasperReport) JRLoader.loadObject(inputStream);
-
-                                            List<ReportPDFDto> reportData = new ArrayList<>();
-                                            for (ReportWorkshop workshop : filteredWorkshops) {
-                                                ReportPDFDto dto = new ReportPDFDto();
-                                                dto.setReport_id(report.getId());
-                                                dto.setReport_year(report.getYear());
-                                                dto.setTrimester(report.getTrimester());
-                                                dto.setReport_description(report.getDescriptionUrl()); // Es la URL
-                                                dto.setSchedule(report.getScheduleUrl());
-                                                dto.setStatus(report.getStatus());
-                                                dto.setWorkshop_id(workshop.getId());
-                                                dto.setWorkshop_name(workshop.getWorkshopName());
-                                                dto.setWorkshop_description(workshop.getDescription());
-                                                dto.setImage_url(workshop.getImageUrl());
-                                                reportData.add(dto);
-                                            }
-
-                                            // 🔁 Leer el HTML desde la URL
-                                            String htmlContent = "";
-                                            try (InputStream htmlStream = new URL(report.getDescriptionUrl()).openStream()) {
-                                                htmlContent = new String(htmlStream.readAllBytes(), StandardCharsets.UTF_8);
-                                            } catch (Exception ex) {
-                                                log.warn("⚠️ No se pudo leer el HTML desde la URL: {}", report.getDescriptionUrl(), ex);
-                                            }
-
-                                            // 🔧 Llenar parámetros
-                                            JRBeanCollectionDataSource dataSource = new JRBeanCollectionDataSource(reportData);
-                                            Map<String, Object> parameters = new HashMap<>();
-                                            parameters.put("ReportTitle", "Reporte de Actividades");
-                                            parameters.put("SUBREPORT_DIR", "images/");
-                                            parameters.put("report_description_html_content", htmlContent);
-
-                                            // 📄 Generar PDF
-                                            JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, dataSource);
-                                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                                            JasperExportManager.exportReportToPdfStream(jasperPrint, baos);
-                                            byte[] pdfBytes = baos.toByteArray();
-
-                                            // ☁️ Subir a Supabase
-                                            storageService.uploadPdf(folder, fileName, pdfBytes).subscribe();
-
-                                            HttpHeaders headers = new HttpHeaders();
-                                            headers.setContentType(MediaType.APPLICATION_PDF);
-                                            headers.setContentDispositionFormData("attachment", fileName);
-                                            return Mono.just(new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK));
-                                        } catch (Exception e) {
-                                            log.error("❌ Error al generar PDF:", e);
-                                            return Mono.error(new RuntimeException("Error generando el PDF", e));
-                                        }
-                                    }))
-                            .switchIfEmpty(Mono.error(new NoSuchElementException("Reporte no encontrado con ID: " + reportId)));
+                    return reportWorkshopRepo.save(rw);
                 });
     }
 
-    private ReportWorkshopDto toDto(ReportWorkshop rw) {
-        ReportWorkshopDto dto = new ReportWorkshopDto();
-        dto.setId(rw.getId());
-        dto.setReportId(rw.getReportId());
-        dto.setWorkshopId(rw.getWorkshopId());
-        dto.setWorkshopName(rw.getWorkshopName());
-        dto.setWorkshopDateStart(rw.getWorkshopDateStart());
-        dto.setWorkshopDateEnd(rw.getWorkshopDateEnd());
-        dto.setDescription(rw.getDescription());
-        dto.setImageUrl(rw.getImageUrl());
-        return dto;
+    // Construye taller con resumen de asistencia consultando datos del cache
+    private Mono<ReportWorkshop> buildWithSummary(ReportWorkshop rw) {
+        return workshopCacheRepo.findById(rw.getWorkshopId())
+                .flatMap(cache -> {
+                    rw.setWorkshopName(cache.getName());
+                    rw.setWorkshopDateStart(cache.getStartDate());
+                    rw.setWorkshopDateEnd(cache.getEndDate());
+
+                    List<Integer> personIds = Stream.of(cache.getPersonId().split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .map(Integer::parseInt)
+                            .toList();
+
+                    return issueCacheRepo.findAllByWorkshopId(rw.getWorkshopId())
+                            .map(IssueCache::getId)
+                            .collectList()
+                            .flatMap(issueIds -> Flux.fromIterable(personIds)
+                                    .flatMap(personId -> Mono.zip(
+                                            personCacheRepo.findById(personId),
+                                            attendanceRepo.findAllByIssueIdInAndPersonId(issueIds, personId).collectList()
+                                    ).map(tuple -> buildSummary(personId, tuple.getT1(), tuple.getT2())))
+                                    .collectList())
+                            .flatMap(summaries -> reportWorkshopRepo.save(rw)
+                                    .flatMap(saved -> {
+                                        summaries.forEach(s -> s.setReportWorkshopId(saved.getId()));
+                                        return summaryRepo.saveAll(summaries).collectList().thenReturn(saved);
+                                    }));
+                });
     }
 
+    // Genera un resumen de asistencia por persona
+    private ReportAttendanceSummary buildSummary(Integer personId, PersonCache person, List<AttendanceCache> records) {
+        return ReportAttendanceSummary.builder()
+                .reportWorkshopId(null)
+                .personId(personId)
+                .personName(person.getName() + " " + person.getSurname())
+                .presentCount((int) records.stream().filter(a -> "A".equalsIgnoreCase(a.getRecord())).count())
+                .absentCount((int) records.stream().filter(a -> "F".equalsIgnoreCase(a.getRecord())).count())
+                .lateCount((int) records.stream().filter(a -> "T".equalsIgnoreCase(a.getRecord())).count())
+                .justifiedCount((int) records.stream().filter(a -> "J".equalsIgnoreCase(a.getRecord())).count())
+                .build();
+    }
+
+    // Convierte entidad a DTO para respuesta al cliente
+    private ReportWorkshopDto toDto(ReportWorkshop rw) {
+        return ReportWorkshopDto.builder()
+                .id(rw.getId())
+                .reportId(rw.getReportId())
+                .workshopId(rw.getWorkshopId())
+                .workshopName(rw.getWorkshopName())
+                .workshopDateStart(rw.getWorkshopDateStart())
+                .workshopDateEnd(rw.getWorkshopDateEnd())
+                .description(rw.getDescription())
+                .imageUrl(rw.getImageUrl())
+                .build();
+    }
+
+    // Convierte DTO a entidad para persistencia
     private ReportWorkshop fromDto(ReportWorkshopDto dto) {
         return ReportWorkshop.builder()
                 .id(dto.getId())
@@ -305,6 +254,20 @@ public class ReportWorkshopService {
                 .workshopDateEnd(dto.getWorkshopDateEnd())
                 .description(dto.getDescription())
                 .imageUrl(dto.getImageUrl())
+                .build();
+    }
+
+    // Convierte entidad de resumen a DTO para mostrar en frontend
+    private ReportAttendanceSummaryDto toDto(ReportAttendanceSummary summary) {
+        return ReportAttendanceSummaryDto.builder()
+                .id(summary.getId())
+                .reportWorkshopId(summary.getReportWorkshopId())
+                .personId(summary.getPersonId())
+                .personName(summary.getPersonName())
+                .presentCount(summary.getPresentCount())
+                .absentCount(summary.getAbsentCount())
+                .lateCount(summary.getLateCount())
+                .justifiedCount(summary.getJustifiedCount())
                 .build();
     }
 }

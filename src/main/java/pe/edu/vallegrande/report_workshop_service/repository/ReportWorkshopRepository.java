@@ -9,9 +9,9 @@ import reactor.core.publisher.Mono;
 @Repository
 public interface ReportWorkshopRepository extends ReactiveCrudRepository<ReportWorkshop, Integer> {
 
-    // 🔍 Obtener talleres por ID de reporte
+    // Obtener talleres por ID de reporte
     Flux<ReportWorkshop> findByReportId(Integer reportId);
 
-    // ❌ Eliminar todos los talleres al editar un reporte
+    // Eliminar todos los talleres al editar un reporte
     Mono<Void> deleteByReportId(Integer reportId);
 }

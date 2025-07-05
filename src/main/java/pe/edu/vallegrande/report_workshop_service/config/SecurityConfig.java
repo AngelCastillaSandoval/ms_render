@@ -1,5 +1,6 @@
 package pe.edu.vallegrande.report_workshop_service.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,15 +14,15 @@ import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import reactor.core.publisher.Mono;
-import org.springframework.beans.factory.annotation.Value;
+
 import java.util.Collection;
 import java.util.List;
 
 /**
- * Configura la seguridad del microservicio:
- * - Permite acceso sin token a Swagger
- * - Requiere JWT con roles USER/ADMIN para acceder a las rutas protegidas
- * - Configura CORS para permitir acceso desde el frontend
+ * Configura seguridad reactiva con WebFlux:
+ * - Permite Swagger y CORS
+ * - Protege rutas por roles (extraídos del JWT de Firebase)
+ * - Convierte el JWT a CustomAuthenticationToken con el rol correspondiente
  */
 @Configuration
 @EnableWebFluxSecurity
@@ -36,53 +37,48 @@ public class SecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(auth -> auth
-                        // Permitir preflight CORS sin token
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // Swagger (libre)
                         .pathMatchers("/swagger-ui.html", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
-
-                        // GET: accesible por USER y ADMIN
                         .pathMatchers(HttpMethod.GET, "/api/reports-workshop/**").hasAnyRole("USER", "ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/workshop-cache/**").hasAnyRole("USER", "ADMIN")
-
-                        // POST, PUT, DELETE: solo ADMIN
                         .pathMatchers(HttpMethod.POST, "/api/reports-workshop/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.PUT, "/api/reports-workshop/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.DELETE, "/api/reports-workshop/**").hasRole("ADMIN")
-
-                        // Todo lo demás requiere estar autenticado
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt
                                 .jwtDecoder(jwtDecoder())
-                                .jwtAuthenticationConverter(this::convertJwt)
+                                .jwtAuthenticationConverter(this::convertJwt) // 👈 Conversión personalizada
                         )
                 )
-                .cors(cors -> cors
-                        .configurationSource(exchange -> {
-                            var config = new org.springframework.web.cors.CorsConfiguration();
-                            config.setAllowCredentials(true);
-                            config.addAllowedOrigin("http://localhost:4200");
-                            config.addAllowedHeader("*");
-                            config.addAllowedMethod("*");
-                            return config;
-                        })
-                )
+                .cors(cors -> cors.configurationSource(exchange -> {
+                    var config = new org.springframework.web.cors.CorsConfiguration();
+                    config.setAllowCredentials(true);
+                    config.addAllowedOrigin("http://localhost:4200");
+                    config.addAllowedHeader("*");
+                    config.addAllowedMethod("*");
+                    return config;
+                }))
                 .build();
     }
 
+    /**
+     * Validador JWT usando el JWK Set URI de Firebase
+     */
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
         return NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
     }
 
+    /**
+     * Convierte un JWT a CustomAuthenticationToken con su rol
+     */
     private Mono<CustomAuthenticationToken> convertJwt(Jwt jwt) {
         String role = jwt.getClaimAsString("role");
         Collection<GrantedAuthority> authorities = role != null
                 ? List.of(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
-                : List.of();
+                : List.of(); // sin rol definido
         return Mono.just(new CustomAuthenticationToken(jwt, authorities));
     }
 }

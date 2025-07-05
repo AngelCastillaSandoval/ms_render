@@ -8,20 +8,30 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+/**
+ * Configuración del WebClient para comunicarse con el microservicio core (core-service).
+ * Agrega automáticamente el token JWT del contexto si está presente.
+ */
 @Configuration
 public class WebClientConfig {
 
     @Value("${core-service.url}")
     private String baseUrl;
 
+    /**
+     * Configura el WebClient con base URL y filtro JWT.
+     */
     @Bean
     public WebClient coreServiceWebClient() {
         return WebClient.builder()
                 .baseUrl(baseUrl)
-                .filter(authHeaderFilter())  // 👈 Añade filtro para token
+                .filter(authHeaderFilter()) // Añade token JWT si existe en el contexto
                 .build();
     }
 
+    /**
+     * Filtro que agrega Authorization si está presente.
+     */
     private ExchangeFilterFunction authHeaderFilter() {
         return (request, next) -> Mono.deferContextual(ctx -> {
             if (ctx.hasKey("Authorization")) {

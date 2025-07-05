@@ -17,6 +17,7 @@ public class SupabaseStorageService {
     private final String bucket;
     private final String projectUrl;
 
+    // Constructor que inicializa WebClient con cabeceras y configuración de Supabase
     public SupabaseStorageService(
             @Value("${supabase.project-url}") String projectUrl,
             @Value("${supabase.api-key}") String apiKey,
@@ -31,12 +32,12 @@ public class SupabaseStorageService {
                 .build();
     }
 
+    // Sube un archivo PDF al bucket y devuelve la URL pública
     public Mono<String> uploadPdf(String folder, String fileName, byte[] pdfBytes) {
         String path = folder + "/" + fileName;
         return webClient.put()
-                .uri(uriBuilder -> uriBuilder.path("/object/{bucket}/{path}")
-                        .build(bucket, path))
-                .header("x-upsert", "true")
+                .uri(uriBuilder -> uriBuilder.path("/object/{bucket}/{path}").build(bucket, path))
+                .header("x-upsert", "true") // reemplaza si ya existe
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(BodyInserters.fromValue(pdfBytes))
                 .retrieve()
@@ -44,21 +45,19 @@ public class SupabaseStorageService {
                 .map(response -> projectUrl + "/storage/v1/object/public/" + bucket + "/" + path);
     }
 
+    // Verifica si un archivo existe en el bucket
     public Mono<Boolean> fileExists(String folder, String fileName) {
         String path = folder + "/" + fileName;
         return webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/object/info/{bucket}/{path}")
-                        .build(bucket, path))
+                .uri(uriBuilder -> uriBuilder.path("/object/info/{bucket}/{path}").build(bucket, path))
                 .retrieve()
                 .bodyToMono(String.class)
                 .map(resp -> true)
-                .onErrorResume(err -> Mono.just(false));
+                .onErrorResume(err -> Mono.just(false)); // Si da error, asumimos que no existe
     }
 
+    // Devuelve la URL pública de un archivo
     public String getPublicUrl(String folder, String fileName) {
         return projectUrl + "/storage/v1/object/public/" + bucket + "/" + folder + "/" + fileName;
     }
-
-
 }

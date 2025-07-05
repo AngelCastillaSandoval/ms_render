@@ -16,15 +16,15 @@ public class WorkshopCacheController {
     private final WorkshopCacheService service;
 
     /**
-     * 🔹 Listar todos los talleres del cache.
+     * Listar todos los talleres del cache.
      */
     @GetMapping
-    public Flux<WorkshopCache> getAll(@RequestParam(required = false) String status) {
-        return service.findAll(status);
+    public Flux<WorkshopCache> getAll(@RequestParam(required = false) String state) {
+        return service.findAll(state);
     }
 
     /**
-     * 🔹 Obtener un taller del cache por ID.
+     * Obtener un taller del cache por ID.
      */
     @GetMapping("/{id}")
     public Mono<WorkshopCache> getById(@PathVariable Integer id) {

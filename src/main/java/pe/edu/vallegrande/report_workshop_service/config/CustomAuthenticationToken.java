@@ -43,7 +43,7 @@ public class CustomAuthenticationToken extends AbstractAuthenticationToken {
      */
     @Override
     public Object getPrincipal() {
-        return jwt.getSubject(); // Por lo general, el UID de Firebase
+        return jwt.getSubject();
     }
 
     /**

@@ -13,9 +13,11 @@ import reactor.core.publisher.Mono;
 public class ReportCoreClient {
 
     private final WebClient coreServiceWebClient;
-
     private static final String BASE_PATH = "/api/reports";
 
+    /**
+     * Listar todos los reportes.
+     */
     public Flux<ReportDto> findAll() {
         return coreServiceWebClient.get()
                 .uri(BASE_PATH)
@@ -23,6 +25,9 @@ public class ReportCoreClient {
                 .bodyToFlux(ReportDto.class);
     }
 
+    /**
+     * Buscar un reporte por ID.
+     */
     public Mono<ReportDto> findById(Integer id) {
         return coreServiceWebClient.get()
                 .uri(BASE_PATH + "/{id}", id)
@@ -31,6 +36,9 @@ public class ReportCoreClient {
                 .onErrorResume(WebClientResponseException.NotFound.class, e -> Mono.empty());
     }
 
+    /**
+     * Crear un nuevo reporte.
+     */
     public Mono<ReportDto> create(ReportDto dto) {
         return coreServiceWebClient.post()
                 .uri(BASE_PATH)
@@ -39,6 +47,9 @@ public class ReportCoreClient {
                 .bodyToMono(ReportDto.class);
     }
 
+    /**
+     * Actualizar un reporte existente.
+     */
     public Mono<ReportDto> update(Integer id, ReportDto dto) {
         return coreServiceWebClient.put()
                 .uri(BASE_PATH + "/{id}", id)
@@ -47,6 +58,9 @@ public class ReportCoreClient {
                 .bodyToMono(ReportDto.class);
     }
 
+    /**
+     * Desactivar un reporte.
+     */
     public Mono<Void> disable(Integer id) {
         return coreServiceWebClient.put()
                 .uri(BASE_PATH + "/disable/{id}", id)
@@ -54,6 +68,9 @@ public class ReportCoreClient {
                 .bodyToMono(Void.class);
     }
 
+    /**
+     * Restaurar un reporte.
+     */
     public Mono<Void> restore(Integer id) {
         return coreServiceWebClient.put()
                 .uri(BASE_PATH + "/restore/{id}", id)
@@ -61,6 +78,9 @@ public class ReportCoreClient {
                 .bodyToMono(Void.class);
     }
 
+    /**
+     * Eliminar un reporte permanentemente.
+     */
     public Mono<Void> delete(Integer id) {
         return coreServiceWebClient.delete()
                 .uri(BASE_PATH + "/{id}", id)
@@ -68,6 +88,9 @@ public class ReportCoreClient {
                 .bodyToMono(Void.class);
     }
 
+    /**
+     * Verifica si ya existe un reporte por año y trimestre.
+     */
     public Mono<Boolean> existsByYearAndTrimester(Integer year, String trimester) {
         return coreServiceWebClient.get()
                 .uri(uriBuilder -> uriBuilder
