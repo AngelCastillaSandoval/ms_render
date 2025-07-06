@@ -25,9 +25,12 @@ public class GoogleSlidesHtmlEditor {
 
     // Inserta texto HTML directo en una slide
     public void insertFromHtml(String presentationId, String slideId, String html, double startY) throws IOException {
+        if (html == null || html.trim().isEmpty()) {
+            return; // No hacer nada si el HTML es null o vacío
+        }
+
         List<Request> requests = new ArrayList<>();
         Document doc = Jsoup.parse(html);
-        double currentY = startY;
 
         StringBuilder textoCompleto = new StringBuilder();
         for (Element element : doc.body().children()) {
@@ -45,16 +48,19 @@ public class GoogleSlidesHtmlEditor {
             }
         }
 
-        if (textoCompleto.toString().isBlank()) {
-            throw new IllegalArgumentException("El HTML no contiene texto válido.");
+        // Validar que hay texto para insertar
+        if (textoCompleto.toString().trim().isEmpty()) {
+            return; // No crear cuadro si no hay texto
         }
 
         requests.addAll(GoogleSlidesUtils.createFormattedText(slideId, textoCompleto.toString(), startY, doc.body()));
 
-        authService.getSlidesService()
-                .presentations()
-                .batchUpdate(presentationId, new BatchUpdatePresentationRequest().setRequests(requests))
-                .execute();
+        if (!requests.isEmpty()) {
+            authService.getSlidesService()
+                    .presentations()
+                    .batchUpdate(presentationId, new BatchUpdatePresentationRequest().setRequests(requests))
+                    .execute();
+        }
     }
 
     // Inserta HTML desde una URL remota

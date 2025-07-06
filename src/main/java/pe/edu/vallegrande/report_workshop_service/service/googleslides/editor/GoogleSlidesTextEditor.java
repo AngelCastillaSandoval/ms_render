@@ -44,24 +44,30 @@ public class GoogleSlidesTextEditor {
         List<Request> requests = new ArrayList<>();
 
         // Título centrado con fuente grande
-        String tituloId = "titulo_" + UUID.randomUUID();
-        requests.addAll(GoogleSlidesUtils.createSimpleTextBox(
-                tituloId, slideId, titulo, x, y, width, height,
-                "Abril Fatface", 44, "CENTER"
-        ));
+        if (titulo != null && !titulo.trim().isEmpty()) {
+            String tituloId = "titulo_" + UUID.randomUUID();
+            requests.addAll(GoogleSlidesUtils.createSimpleTextBox(
+                    tituloId, slideId, titulo, x, y, width, height,
+                    "Abril Fatface", 44, "CENTER"
+            ));
+        }
 
-        // Descripción debajo del título
-        String descripcionId = "desc_" + UUID.randomUUID();
-        requests.addAll(GoogleSlidesUtils.createSimpleTextBox(
-                descripcionId, slideId, descripcion,
-                x, y + height + 20, width, 200,
-                "Arial", 16, null
-        ));
+        // Descripción debajo del título - SOLO si no es null ni vacía
+        if (descripcion != null && !descripcion.trim().isEmpty()) {
+            String descripcionId = "desc_" + UUID.randomUUID();
+            requests.addAll(GoogleSlidesUtils.createSimpleTextBox(
+                    descripcionId, slideId, descripcion,
+                    x, y + height + 20, width, 200,
+                    "Arial", 16, null
+            ));
+        }
 
-        // Enviar todas las requests
-        authService.getSlidesService()
-                .presentations()
-                .batchUpdate(presentationId, new BatchUpdatePresentationRequest().setRequests(requests))
-                .execute();
+        // Enviar requests solo si hay alguna
+        if (!requests.isEmpty()) {
+            authService.getSlidesService()
+                    .presentations()
+                    .batchUpdate(presentationId, new BatchUpdatePresentationRequest().setRequests(requests))
+                    .execute();
+        }
     }
 }

@@ -146,9 +146,14 @@ public class GoogleSlidesUtils {
      * Crea un cuadro de texto simple (sin formato HTML), con estilo personalizado.
      */
     public static List<Request> createSimpleTextBox(String objectId, String slideId, String texto,
-                                                       double x, double y, double width, double height,
-                                                       String fontFamily, int fontSize, String alignment) {
+                                                    double x, double y, double width, double height,
+                                                    String fontFamily, int fontSize, String alignment) {
         List<Request> requests = new ArrayList<>();
+
+        // Validar que el texto no sea null ni vacío
+        if (texto == null || texto.trim().isEmpty()) {
+            return requests; // Retornar lista vacía si no hay texto
+        }
 
         // Crear cuadro de texto
         requests.add(new Request().setCreateShape(new CreateShapeRequest()
@@ -170,7 +175,7 @@ public class GoogleSlidesUtils {
         requests.add(new Request().setInsertText(new InsertTextRequest()
                 .setObjectId(objectId)
                 .setInsertionIndex(0)
-                .setText(texto)));
+                .setText(texto.trim()))); // Usar trim() para limpiar espacios
 
         // Estilo de texto
         TextStyle style = new TextStyle()
@@ -184,7 +189,7 @@ public class GoogleSlidesUtils {
                 .setFields("fontFamily,fontSize")));
 
         // Alineación si se indicó
-        if (alignment != null) {
+        if (alignment != null && !alignment.trim().isEmpty()) {
             requests.add(new Request().setUpdateParagraphStyle(new UpdateParagraphStyleRequest()
                     .setObjectId(objectId)
                     .setTextRange(new Range().setType("ALL"))
