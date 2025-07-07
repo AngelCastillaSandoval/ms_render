@@ -17,7 +17,6 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDate;
 
 @Slf4j
-@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/reports-workshop")
 @RequiredArgsConstructor

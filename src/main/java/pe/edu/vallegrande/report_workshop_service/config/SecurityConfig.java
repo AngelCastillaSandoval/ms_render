@@ -32,6 +32,9 @@ public class SecurityConfig {
     @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}")
     private String jwkSetUri;
 
+    @Value("${frontend.url}")
+    private String frontendUrl;
+
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
@@ -55,7 +58,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(exchange -> {
                     var config = new org.springframework.web.cors.CorsConfiguration();
                     config.setAllowCredentials(true);
-                    config.addAllowedOrigin("http://localhost:4200");
+                    config.addAllowedOrigin(frontendUrl);
                     config.addAllowedHeader("*");
                     config.addAllowedMethod("*");
                     return config;

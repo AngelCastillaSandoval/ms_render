@@ -87,3 +87,7 @@ google:
     base64: ${GOOGLE_CREDENTIALS_BASE64}   # Ruta al archivo JSON de la cuenta de servicio
   template:
     id: ${GOOGLE_TEMPLATE_ID}          # ID de la plantilla base de Google Slides
+
+# Url del frontend
+frontend:
+  url: ${URL_FRONTEND}

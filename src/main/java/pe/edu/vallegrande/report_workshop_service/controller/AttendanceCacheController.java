@@ -6,7 +6,6 @@ import pe.edu.vallegrande.report_workshop_service.dto.PreviewAttendanceSummaryDt
 import pe.edu.vallegrande.report_workshop_service.service.AttendanceCacheService;
 import reactor.core.publisher.Flux;
 
-@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/attendance-preview")
 @RequiredArgsConstructor
